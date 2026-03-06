@@ -421,7 +421,7 @@ function cerrarModal(id){ document.getElementById(id).classList.remove('abierto'
 document.addEventListener('click', function(e){ if(e.target.classList.contains('overlay')){ e.target.classList.remove('abierto'); document.body.style.overflow=''; } });
 
 function mostrarTab(t){
-  ['pedidos','encargos','productos','config','stats'].forEach(function(x){
+  ['pedidos','enviados','productos','config','stats'].forEach(function(x){
     var el = document.getElementById('tab_'+x);
     if(el) el.style.display = (x===t) ? 'block' : 'none';
   });
@@ -547,7 +547,14 @@ def nav(activo="tienda", c=None):
     if c is None: c = cfg()
     nom = c.get("nombre","Mercado Frutas Frescas")
     logo = c.get("logo","")
-    logo_tag = ('<img src="data:image/jpeg;base64,%s">' % logo) if logo else "🍊"
+    if logo:
+        if ";" in logo:
+            lmime, lb64 = logo.split(";", 1)
+        else:
+            lmime, lb64 = "image/jpeg", logo
+        logo_tag = '<img src="data:%s;base64,%s">' % (lmime, lb64)
+    else:
+        logo_tag = "🍊"
     links = [("tienda","/","🍊 Tienda"),("mis_pedidos","/mis-pedidos","📦 Mis Pedidos"),("admin_panel","/admin","⚙️ Admin")]
     li = "".join('<a href="%s" class="%s">%s</a>' % (u, "on" if activo==k else "", l) for k,u,l in links)
     return """<!DOCTYPE html><html lang="es"><head>
@@ -620,7 +627,7 @@ def hacer_ticket(p, admin=False):
              rows, fmt(p["subtotal"]), env_row, fmt(p["total"]), hora_row, pie_txt)
 
 def banner_activos(peds):
-    activos = [p for p in peds if p["estado"] in ("Pendiente","Confirmado")]
+    activos = [p for p in peds if p["estado"] in ("Pendiente","Aprobado","Confirmado","En Espera")]
     activos = sorted(activos, key=lambda x: x["id"])
     if not activos: return ""
     chips = ""
@@ -659,7 +666,15 @@ def tienda():
     cards_html = ""
     modales_det = ""
     for p in prods:
-        img_src  = "data:image/jpeg;base64,%s" % p["imagen"] if p["imagen"] else ""
+        raw_img  = p["imagen"] or ""
+        if raw_img:
+            if ";" in raw_img:
+                mime_part, b64_part = raw_img.split(";", 1)
+            else:
+                mime_part, b64_part = "image/jpeg", raw_img
+            img_src = "data:%s;base64,%s" % (mime_part, b64_part)
+        else:
+            img_src = ""
         img_card = '<img src="%s" style="width:100%%;height:100%%;object-fit:cover">' % img_src if img_src else "🍊"
         img_modal = ('<img src="%s" style="width:100%%;max-height:250px;object-fit:cover;border-radius:8px;margin-bottom:14px">' % img_src) if img_src else '<div style="text-align:center;font-size:5rem;padding:18px 0">🍊</div>'
         desc  = p["descripcion"] or ""
@@ -874,7 +889,6 @@ def mis_pedidos():
             elif cc=="revision":     bdg='<span class="bdg bdg-az" style="background:#dbeafe;color:#1e40af;border:1px solid #3b82f6">🔵 Revisar costo</span>'
             elif cc=="cancelado":    bdg='<span class="bdg bdg-x">❌ Cancelado</span>'
             elif p["estado"]=="Negado": bdg='<span class="bdg bdg-x">❌ Negado</span>'
-            elif p["estado"]=="Aprobado": bdg='<span class="bdg bdg-c">✅ Aprobado</span>'
             elif cc=="aceptado":     bdg='<span class="bdg bdg-c">✅ Confirmado</span>'
             else:                    bdg='<span class="bdg bdg-p">⏳ Pendiente</span>'
 
@@ -1003,22 +1017,21 @@ def admin_panel():
 
 def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
     c = cfg()
-    activos  = [p for p in peds if p["estado"] in ("Pendiente","Confirmado")]
-    aprobados = [p for p in peds if p["estado"] == "Aprobado"]
+    activos  = [p for p in peds if p["estado"] in ("Pendiente","Aprobado","Confirmado","En Espera")]
     enviados = [p for p in peds if p["estado"] == "Enviado"]
-    ingresos = sum(p["total"] for p in peds if p["estado"] == "Pagado")
+    ingresos = sum(p["total"] for p in peds if p["estado"] != "Cancelado")
 
     stats_html = """<div class="stats">
   <div class="stat"><div class="stat-n">%d</div><div class="stat-l">Total</div></div>
   <div class="stat"><div class="stat-n" style="color:#f5a623">%d</div><div class="stat-l">Pendientes</div></div>
-  <div class="stat"><div class="stat-n" style="color:#22c55e">%d</div><div class="stat-l">Aprobados</div></div>
+  <div class="stat"><div class="stat-n" style="color:#f5a623">%d</div><div class="stat-l">En Espera Pago</div></div>
   <div class="stat"><div class="stat-n" style="color:#22c55e">%d</div><div class="stat-l">Pagados</div></div>
   <div class="stat"><div class="stat-n" style="color:#ef4444">%d</div><div class="stat-l">Negados</div></div>
   <div class="stat"><div class="stat-n">%d</div><div class="stat-l">Productos</div></div>
   <div class="stat"><div class="stat-n" style="font-size:.95rem">%s</div><div class="stat-l">Ingresos</div></div>
 </div>""" % (len(peds),
              sum(1 for p in peds if p["estado"]=="Pendiente"),
-             sum(1 for p in peds if p["estado"]=="Aprobado"),
+             sum(1 for p in peds if p["estado"]=="En Espera"),
              sum(1 for p in peds if p["estado"]=="Pagado"),
              sum(1 for p in peds if p["estado"]=="Negado"),
              len(prods), fmt(ingresos))
@@ -1155,7 +1168,14 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
 
     nom_actual  = c.get("nombre","Mercado Frutas Frescas")
     logo_actual = c.get("logo","")
-    logo_prev   = ('<img src="data:image/jpeg;base64,%s" class="logo-prev">' % logo_actual) if logo_actual else ""
+    if logo_actual:
+        if ";" in logo_actual:
+            lm, lb = logo_actual.split(";", 1)
+        else:
+            lm, lb = "image/jpeg", logo_actual
+        logo_prev = '<img src="data:%s;base64,%s" class="logo-prev">' % (lm, lb)
+    else:
+        logo_prev = ""
     on = cfg().get("activo","1") == "1"
     estado_box = '<div class="alerta alerta-ok">✅ MERCADO ABIERTO</div>' if on else '<div class="alerta alerta-er">🔒 MERCADO CERRADO</div>'
     btn_toggle = ""
@@ -1193,12 +1213,12 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
     html += "<div style='display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap'>"
     html += "  <div style='display:flex;gap:7px;flex-wrap:wrap'>"
     html += "    <button class='btn btn-mo' onclick=\"mostrarTab('pedidos')\">📋 Pedidos</button>"
+    html += "    <button class='btn' onclick=\"mostrarTab('enviados')\" style='background:linear-gradient(135deg,#cc0000,#ff2222);color:#fff'>🚚 Enviados</button>"
     html += "    <button class='btn btn-do' onclick=\"mostrarTab('productos')\">🍊 Productos</button>"
     html += "    <button class='btn btn-ve' onclick=\"mostrarTab('config')\">⚙️ Config</button>"
     html += "    <button class='btn btn-az' onclick=\"mostrarTab('stats')\">📊 Stats</button>"
-    html += "    <button class='btn' onclick=\"mostrarTab('encargos')\" style='background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff'>📦 Encargos</button>"
     html += "  </div>"
-    html += "  <a href='/admin/encargos' style='background:linear-gradient(135deg,#cc0000,#ff4444);color:#8b0000;padding:12px 22px;border-radius:8px;font-weight:900;font-size:.95rem;text-decoration:none;border:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-family:Nunito,sans-serif'>🖨️ Imprimir Encargos</a>"
+    html += "  <a href='/admin/encargos' style='background:linear-gradient(135deg,#cc0000,#ff4444);color:#8b0000;padding:12px 22px;border-radius:8px;font-weight:900;font-size:.95rem;text-decoration:none;border:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-family:Nunito,sans-serif'>🖨️ Encargos del Día</a>"
     html += "</div>"
 
     html += "<div id='tab_pedidos'>"
@@ -1206,64 +1226,61 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
         len(activos), filas_ped or '<tr><td colspan="8" style="text-align:center;padding:18px;color:#aaa">No hay pedidos activos.</td></tr>')
     html += "</div>"
 
-    # ── ENCARGOS TAB (aprobados + pagado/no pagado) ──
-    filas_enc = ""; modales_enc = ""
-    for p in sorted(aprobados + [x for x in peds if x["estado"] in ("Pagado","En Espera de Pago")], key=lambda x: x["id"]):
-        mid_enc = "enc_%d" % p["id"]
-        tk_enc  = hacer_ticket(p, admin=True)
-        it_enc  = tabla_items(p["items"] or "[]")
-        modales_enc += """
-<div class="overlay" id="%s">
-  <div class="modal ancho">
-    <button class="modal-x" onclick="cerrarModal('%s')">✕</button>
-    <div class="modal-titulo">📦 Encargo #%d</div>
-    <div style="font-size:.82rem;color:#888;margin-bottom:11px">👤 <strong>%s</strong> · 📱 %s</div>
-    %s%s
-    <button class="btn btn-mo btn-full" style="margin-top:12px" onclick="imprimirTicket('%s')">🖨️ Imprimir</button>
-  </div>
-</div>""" % (mid_enc, mid_enc, p["id"], p["nombre_cliente"], p["celular"], it_enc, tk_enc, mid_enc)
+    espera_peds  = [p for p in peds if p["estado"] == "En Espera"]
+    pagados_peds = [p for p in peds if p["estado"] == "Pagado"]
 
-        if p["estado"] == "Aprobado":
-            est_badge = '<span class="bdg bdg-c">✅ Aprobado</span>'
-            btns_pago = (
-                "<a href='/admin/marcar-pagado/%d' class='btn btn-ve' style='font-size:.8rem;padding:5px 12px'>💵 Pagado</a>"
-                "<a href='/admin/marcar-nopago/%d' class='btn btn-ro' style='font-size:.8rem;padding:5px 12px'>❌ No Pagado</a>"
-            ) % (p["id"], p["id"])
-        elif p["estado"] == "Pagado":
-            est_badge = '<span class="bdg bdg-c">💵 Pagado</span>'
-            btns_pago = ""
-        else:
-            est_badge = '<span class="bdg bdg-espera">⏳ Pendiente pago</span>'
-            btns_pago = (
-                "<a href='/admin/marcar-pagado/%d' class='btn btn-ve' style='font-size:.8rem;padding:5px 12px'>💵 Pagado</a>"
-            ) % p["id"]
+    if espera_peds:
+        nombres = ", ".join("<strong>%s</strong> (%s)" % (p["nombre_cliente"], fmt(p["total"])) for p in espera_peds)
+        deudores_banner = '<div class="alerta alerta-in" style="margin-bottom:14px">⚠️ Pendientes de pago: ' + nombres + '</div>'
+    else:
+        deudores_banner = '<div class="alerta alerta-ok">✅ Todos los pedidos aprobados han sido pagados.</div>'
 
-        filas_enc += """<tr>
-  <td><strong>#%d</strong></td>
-  <td><span class="ped-ficha">%s</span></td>
-  <td><strong>%s</strong><br><span style="font-size:.73rem;color:#888">📱 %s</span></td>
-  <td style="color:var(--mo);font-weight:900">%s</td>
-  <td>%s</td>
-  <td style="color:#c8a415;font-size:.8rem">%s</td>
-  <td style="display:flex;gap:5px;flex-wrap:wrap">
-    <button class="btn btn-az" style="font-size:.76rem;padding:4px 9px" onclick="abrirModal('%s')">📋</button>
-    %s
-  </td>
-</tr>""" % (p["id"], p["ficha"] or "—", p["nombre_cliente"], p["celular"],
-            fmt(p["total"]), est_badge, p["fecha"], mid_enc, btns_pago)
+    filas_espera = ""
+    for p in espera_peds:
+        filas_espera += (
+            "<tr style='background:#1a0a00'>"
+            "<td><strong style='color:#f5a623'>#%d</strong></td>"
+            "<td><span class='ped-ficha'>%s</span></td>"
+            "<td><strong>%s</strong><br><span style='font-size:.73rem;color:#c8a415'>%s</span></td>"
+            "<td style='color:#f5c518;font-weight:900'>%s</td>"
+            "<td style='color:#c8a415;font-size:.8rem'>%s</td>"
+            "<td><a href='/admin/marcar-pagado/%d' class='btn btn-ve' style='font-size:.8rem;padding:5px 12px'>Pagado</a></td>"
+            "</tr>"
+        ) % (p["id"], p["ficha"] or "—", p["nombre_cliente"], p["celular"],
+             fmt(p["total"]), p["fecha"], p["id"])
+
+    filas_pagados = ""
+    for p in pagados_peds:
+        filas_pagados += (
+            "<tr>"
+            "<td><strong>#%d</strong></td>"
+            "<td><span class='ped-ficha'>%s</span></td>"
+            "<td><strong>%s</strong></td>"
+            "<td style='color:#22c55e;font-weight:900'>%s</td>"
+            "<td style='color:#c8a415;font-size:.8rem'>%s</td>"
+            "</tr>"
+        ) % (p["id"], p["ficha"] or "—", p["nombre_cliente"], fmt(p["total"]), p["fecha"])
 
     html += (
-        "<div id='tab_encargos' style='display:none'>"
-        "<div class='panel'><h2>📦 Encargos — Aprobados y Pagos (%d)</h2>"
-        "<div class='tabla-wrap'><table><thead><tr>"
-        "<th>#</th><th>Ficha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th>"
-        "</tr></thead><tbody>%s</tbody></table></div></div>"
+        "<div id='tab_espera' style='display:none'>"
+        "<div class='panel'><h2>En Espera del Pago (%d)</h2>%s"
+        "<div class='tabla-wrap'><table><thead><tr><th>#</th><th>Ficha</th><th>Cliente</th><th>Total</th><th>Fecha</th><th>Accion</th></tr></thead>"
+        "<tbody>%s</tbody></table></div></div>"
+        "<div class='panel' style='margin-top:16px'><h2>Pagados (%d)</h2>"
+        "<div class='tabla-wrap'><table><thead><tr><th>#</th><th>Ficha</th><th>Cliente</th><th>Total</th><th>Fecha</th></tr></thead>"
+        "<tbody>%s</tbody></table></div></div>"
         "</div>"
     ) % (
-        len(aprobados) + len([x for x in peds if x["estado"] in ("Pagado","En Espera de Pago")]),
-        filas_enc or "<tr><td colspan='7' style='text-align:center;padding:18px;color:#c8a415'>No hay encargos aún.</td></tr>"
+        len(espera_peds), deudores_banner,
+        filas_espera or "<tr><td colspan='6' style='text-align:center;padding:18px;color:#c8a415'>No hay pedidos en espera.</td></tr>",
+        len(pagados_peds),
+        filas_pagados or "<tr><td colspan='5' style='text-align:center;padding:18px;color:#c8a415'>Sin pagos aun.</td></tr>"
     )
-    html += modales_enc
+
+    html += "<div id='tab_enviados' style='display:none'>"
+    html += "<div class='env-section'><h2>🚚 Historial de Enviados (%d)</h2><div class='tabla-wrap'><table><thead><tr><th>#</th><th>Ficha</th><th>Cliente</th><th>Total</th><th>Fecha</th><th>Ver</th></tr></thead><tbody>%s</tbody></table></div></div>" % (
+        len(enviados), filas_env or '<tr><td colspan="6" style="text-align:center;padding:18px;color:#aaa">Sin enviados.</td></tr>')
+    html += modales_env + "</div>"
 
     html += "<div id='tab_productos' style='display:none'>"
     html += "<div class='ag'>"
@@ -1343,9 +1360,12 @@ def admin_config():
         f = request.files["logo"]
         if f and f.filename:
             raw = f.read()
+            mime = f.mimetype or "image/jpeg"
+            if not mime.startswith("image/"): mime = "image/jpeg"
             if len(raw) < 2_000_000:
+                logo_data = mime + ";" + base64.b64encode(raw).decode()
                 db.execute("INSERT OR REPLACE INTO configuracion VALUES('logo',?)",
-                           (base64.b64encode(raw).decode(),))
+                           (logo_data,))
     db.commit(); db.close()
     return redirect(url_for("admin_panel", msg="✅ Configuración guardada.", tipo="ok"))
 
@@ -1358,7 +1378,10 @@ def admin_add_prod():
         fi = request.files["imagen"]
         if fi and fi.filename:
             raw = fi.read()
-            if len(raw) < 2_000_000: img = base64.b64encode(raw).decode()
+            mime = fi.mimetype or "image/jpeg"
+            if not mime.startswith("image/"): mime = "image/jpeg"
+            if len(raw) < 2_000_000:
+                img = mime + ";" + base64.b64encode(raw).decode()
     db = get_db()
     db.execute("INSERT INTO productos(nombre,precio,descripcion,unidad,categoria,imagen) VALUES(?,?,?,?,?,?)",
                (f["nombre"].strip(), float(f["precio"]),
@@ -1379,6 +1402,15 @@ def admin_edit_prod():
                 f.get("descripcion","").strip(),
                 f.get("unidad","unidad").strip(),
                 f.get("categoria","Frutas"), f["pid"]))
+    if "imagen" in request.files:
+        fi = request.files["imagen"]
+        if fi and fi.filename:
+            raw = fi.read()
+            mime = fi.mimetype or "image/jpeg"
+            if not mime.startswith("image/"): mime = "image/jpeg"
+            if len(raw) < 2_000_000:
+                img = mime + ";" + base64.b64encode(raw).decode()
+                db.execute("UPDATE productos SET imagen=? WHERE id=?", (img, f["pid"]))
     db.commit(); db.close()
     return redirect(url_for("admin_panel", msg="✅ Producto actualizado.", tipo="ok"))
 
@@ -1399,10 +1431,11 @@ def admin_upd_pedido():
     pid    = f["pedido_id"]
     est    = f["estado"]
     motivo = f.get("motivo","").strip()
+    if est == "Aprobado": est = "En Espera"
     db     = get_db()
     db.execute("UPDATE pedidos SET estado=?,motivo=? WHERE id=?", (est,motivo,pid))
     db.commit(); db.close()
-    if est == "Aprobado": msg = "✅ Pedido #%s aprobado — aparece en Encargos." % pid
+    if est == "En Espera": msg = "✅ Pedido #%s aprobado — en espera del pago." % pid
     elif est == "Negado":  msg = "❌ Pedido #%s negado." % pid
     else:                  msg = "⏳ Pedido #%s en pendiente." % pid
     return redirect(url_for("admin_panel", msg=msg, tipo="ok"))
@@ -1580,10 +1613,9 @@ body{font-family:'Nunito',sans-serif;background:#0a0a0a;color:#f0f0f0;padding:16
 @app.route("/reset-frutas-2024")
 def reset_ver():
     db = get_db()
-    total   = db.execute("SELECT COUNT(*) FROM pedidos WHERE estado IN ('Pendiente','Negado','Pagado','En Espera','Cancelado')").fetchone()[0]
-    ingr    = db.execute("SELECT SUM(total) FROM pedidos WHERE estado='Pagado'").fetchone()[0] or 0
-    negados = db.execute("SELECT COUNT(*) FROM pedidos WHERE estado='Negado'").fetchone()[0]
-    pagados = db.execute("SELECT COUNT(*) FROM pedidos WHERE estado='Pagado'").fetchone()[0]
+    total = db.execute("SELECT COUNT(*) FROM pedidos").fetchone()[0]
+    ingr  = db.execute("SELECT SUM(total) FROM pedidos WHERE estado!='Cancelado'").fetchone()[0] or 0
+    env   = db.execute("SELECT COUNT(*) FROM pedidos WHERE estado='Enviado'").fetchone()[0]
     db.close()
     return """<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1.0'>
@@ -1608,26 +1640,25 @@ h1{color:#dc2626;font-size:1.9rem;margin-bottom:6px}
 <div class='box'>
   <div style='font-size:3.5rem;margin-bottom:14px'>⚠️</div>
   <h1>Resetear Mes</h1>
-  <p class='sub'>Se eliminarán solo: Pendientes, Negados, Pagados y En Espera.<br><strong style='color:#22c55e'>Los Aprobados (Encargos) NO se tocan.</strong></p>
-  <div class='fila'><span>📦 Pedidos a eliminar</span><span class='val'>%d</span></div>
-  <div class='fila'><span>❌ Negados</span><span class='val'>%d</span></div>
-  <div class='fila'><span>💵 Pagados</span><span class='val'>%d</span></div>
+  <p class='sub'>Resumen antes de eliminar</p>
+  <div class='fila'><span>📦 Total pedidos</span><span class='val'>%d</span></div>
+  <div class='fila'><span>🚚 Enviados</span><span class='val'>%d</span></div>
   <div class='total'><span>💰 Ingresos del mes</span><span class='verde'>%s</span></div>
-  <div class='warn'>⚠️ Esta acción no se puede deshacer. Los Encargos aprobados se conservan.</div>
+  <div class='warn'>⚠️ Esta acción borrará TODOS los pedidos. No se puede deshacer.</div>
   <div class='btns'>
-    <a href='/reset-frutas-2024/ok' class='b-del'>🗑️ RESETEAR MES</a>
+    <a href='/reset-frutas-2024/ok' class='b-del'>🗑️ ELIMINAR TODO</a>
     <a href='/admin' class='b-can'>✕ Cancelar</a>
   </div>
   <p class='fecha'>%s</p>
-</div></body></html>""" % (total, negados, pagados, fmt(ingr), datetime.now().strftime("%d/%m/%Y %H:%M"))
+</div></body></html>""" % (total, env, fmt(ingr), datetime.now().strftime("%d/%m/%Y %H:%M"))
 
 
 @app.route("/reset-frutas-2024/ok")
 def reset_ok():
     db = get_db()
-    total = db.execute("SELECT COUNT(*) FROM pedidos WHERE estado IN ('Pendiente','Negado','Pagado','En Espera','Cancelado')").fetchone()[0]
-    ingr  = db.execute("SELECT SUM(total) FROM pedidos WHERE estado='Pagado'").fetchone()[0] or 0
-    db.execute("DELETE FROM pedidos WHERE estado IN ('Pendiente','Negado','Pagado','En Espera','Cancelado')")
+    total = db.execute("SELECT COUNT(*) FROM pedidos").fetchone()[0]
+    ingr  = db.execute("SELECT SUM(total) FROM pedidos WHERE estado!='Cancelado'").fetchone()[0] or 0
+    db.execute("DELETE FROM pedidos")
     db.commit(); db.close()
     return """<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1.0'>
@@ -1760,18 +1791,6 @@ def marcar_pagado(pid):
     db.execute("UPDATE pedidos SET estado='Pagado' WHERE id=?", (pid,))
     db.commit(); db.close()
     return redirect(url_for("admin_panel", msg="💵 Pedido #%d marcado como pagado." % pid, tipo="ok"))
-
-
-# ═══════════════════════════════════════════════════════
-# MARCAR NO PAGADO (vuelve a Aprobado)
-# ═══════════════════════════════════════════════════════
-@app.route("/admin/marcar-nopago/<int:pid>")
-def marcar_nopago(pid):
-    if not session.get("admin"): return redirect(url_for("admin_login"))
-    db = get_db()
-    db.execute("UPDATE pedidos SET estado='Aprobado' WHERE id=?", (pid,))
-    db.commit(); db.close()
-    return redirect(url_for("admin_panel", msg="❌ Pedido #%d marcado como No Pagado." % pid, tipo="in"))
 
 
 # ═══════════════════════════════════════════════════════
