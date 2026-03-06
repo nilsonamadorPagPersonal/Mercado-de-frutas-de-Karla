@@ -115,6 +115,11 @@ def ficha_nueva():
     return n.strftime("%H%M%S") + str(n.microsecond)[:3]
 
 # ═══════════════════════════════════════════════════════
+# INICIALIZAR DB AL IMPORTAR (FIX RAILWAY/GUNICORN)
+# ═══════════════════════════════════════════════════════
+init_db()
+
+# ═══════════════════════════════════════════════════════
 # ESTILOS
 # ═══════════════════════════════════════════════════════
 ESTILOS = """
@@ -644,7 +649,6 @@ def tienda():
     tipo = request.args.get("tipo","ok")
     nom  = c.get("nombre","Mercado Frutas Frescas")
 
-    # Categorías
     cats_set = sorted(set(p["categoria"] for p in prods))
     cats_html = '<button class="cat sel" data-cat="todos" onclick="filtrarCat(this,\'todos\')">🍊 Todos</button>'
     iconos = {"Tropicales":"🌴","Cítricos":"🍋","Berries":"🍓","Frutas":"🍎","Verduras":"🥬","Otros":"🛒"}
@@ -652,7 +656,6 @@ def tienda():
         ico = iconos.get(cat, "🍊")
         cats_html += '<button class="cat" data-cat="%s" onclick="filtrarCat(this,\'%s\')">%s %s</button>' % (esc(cat),esc(cat),ico,cat)
 
-    # Cards + Modales detalle
     cards_html = ""
     modales_det = ""
     for p in prods:
@@ -882,9 +885,6 @@ def mis_pedidos():
                 env_banner = '<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px;margin:9px 0"><p style="color:#b91c1c;font-weight:900;margin-bottom:5px">❌ Pedido no disponible</p><p style="font-size:.84rem;color:#555">Motivo: <strong>%s</strong></p></div>' % motivo_txt
 
             confirmar_box = ""
-            if envio > 0 and cc == "revision":
-                confirmar_box = ""
-
             hora_sp  = '<span style="color:#16a34a;font-weight:800">⏰ Llega: %s</span>' % p["hora_entrega"] if p["hora_entrega"] else ""
             ficha_sp = '<span class="ped-ficha">Ficha #%s</span>' % fch if fch else ""
             mid_tk   = "tk_%d" % p["id"]
@@ -1006,7 +1006,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
     enviados = [p for p in peds if p["estado"] == "Enviado"]
     ingresos = sum(p["total"] for p in peds if p["estado"] != "Cancelado")
 
-    # Stats
     stats_html = """<div class="stats">
   <div class="stat"><div class="stat-n">%d</div><div class="stat-l">Total</div></div>
   <div class="stat"><div class="stat-n" style="color:#f5a623">%d</div><div class="stat-l">Pendientes</div></div>
@@ -1022,7 +1021,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
              sum(1 for p in peds if p["estado"]=="Negado"),
              len(prods), fmt(ingresos))
 
-    # Tabla pedidos activos
     filas_ped = ""; modales_ped = ""
     for p in sorted(activos, key=lambda x: x["id"]):
         envio  = float(p["envio"] or 0)
@@ -1079,7 +1077,7 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
   <td><strong>#%d</strong></td>
   <td><span class="ped-ficha">%s</span></td>
   <td><strong>%s</strong><br><span style="font-size:.73rem;color:#888">📱 %s</span></td>
-    <td><span style="background:#1a0000;color:#cc0000;border:1px solid #ff2222;border-radius:20px;padding:2px 8px;font-size:.73rem;font-weight:800">%d items</span></td>
+  <td><span style="background:#1a0000;color:#cc0000;border:1px solid #ff2222;border-radius:20px;padding:2px 8px;font-size:.73rem;font-weight:800">%d items</span></td>
   <td style="color:var(--mo);font-weight:900">%s</td>
   <td>%s</td>
   <td style="display:flex;gap:5px;flex-wrap:wrap">
@@ -1089,7 +1087,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
 </tr>""" % (p["id"], fch, p["nombre_cliente"], p["celular"],
             n_it, fmt(p["total"]), bdg_estado(p["estado"]), mid_e, mid_o)
 
-    # Tabla enviados
     filas_env = ""; modales_env = ""
     for p in sorted(enviados, key=lambda x: x["id"], reverse=True):
         mid_v = "env_%d" % p["id"]
@@ -1116,7 +1113,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
 </tr>""" % (p["id"], p["ficha"] or "—", p["nombre_cliente"],
             fmt(p["total"]), p["fecha"], mid_v)
 
-    # Tabla productos
     cats_opts = "".join('<option value="%s">%s</option>' % (cat,cat)
                         for cat in ["Frutas","Tropicales","Cítricos","Berries","Verduras","Otros"])
     filas_prod = ""; modales_prod = ""
@@ -1155,7 +1151,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
 </tr>""" % (p["nombre"], p["unidad"] or "", (p["descripcion"] or "")[:28],
             p["categoria"], fmt(p["precio"]), mid_ep, p["id"])
 
-    # Config
     nom_actual  = c.get("nombre","Mercado Frutas Frescas")
     logo_actual = c.get("logo","")
     logo_prev   = ('<img src="data:image/jpeg;base64,%s" class="logo-prev">' % logo_actual) if logo_actual else ""
@@ -1209,8 +1204,7 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
         len(activos), filas_ped or '<tr><td colspan="8" style="text-align:center;padding:18px;color:#aaa">No hay pedidos activos.</td></tr>')
     html += "</div>"
 
-    # En Espera tab
-    espera_peds = [p for p in peds if p["estado"] == "En Espera"]
+    espera_peds  = [p for p in peds if p["estado"] == "En Espera"]
     pagados_peds = [p for p in peds if p["estado"] == "Pagado"]
 
     if espera_peds:
@@ -1400,7 +1394,6 @@ def admin_upd_pedido():
     pid    = f["pedido_id"]
     est    = f["estado"]
     motivo = f.get("motivo","").strip()
-    # When approved, move to waiting payment
     if est == "Aprobado": est = "En Espera"
     db     = get_db()
     db.execute("UPDATE pedidos SET estado=?,motivo=? WHERE id=?", (est,motivo,pid))
@@ -1459,9 +1452,8 @@ def admin_grafica():
     return render_admin(peds2, prods2, g64)
 
 
-
 # ═══════════════════════════════════════════════════════
-# RUTA: ENCARGOS DEL DÍA (HOJA IMPRIMIBLE)
+# RUTA: ENCARGOS DEL DÍA
 # ═══════════════════════════════════════════════════════
 @app.route("/admin/encargos")
 def admin_encargos():
@@ -1521,7 +1513,6 @@ def admin_encargos():
              p["fecha"], p["estado"],
              rows, notas, fmt(p["total"]))
 
-    # Build 2x2 grid
     grid_rows = ""
     for i in range(0, len(peds), 2):
         b1 = hacer_bloque(peds[i])
@@ -1661,10 +1652,6 @@ a{display:inline-block;margin-top:18px;background:linear-gradient(135deg,#cc0000
 </div></body></html>""" % (total, fmt(ingr), datetime.now().strftime("%d/%m/%Y %H:%M"))
 
 
-# ═══════════════════════════════════════════════════════
-# INICIO
-# ═══════════════════════════════════════════════════════
-
 @app.route("/admin/descargar-encargos")
 def descargar_encargos():
     if not session.get("admin"): return redirect(url_for("admin_login"))
@@ -1757,22 +1744,6 @@ body{background:#fff;color:#111;padding:8px}
     return html
 
 
-
-
-if __name__ == "__main__":
-    init_db()
-    print("\n" + "="*50)
-    print("  🍊  Mercado Frutas Frescas")
-    print("="*50)
-    print("  Tienda:  http://localhost:5000")
-    print("  Admin:   http://localhost:5000/admin")
-    print("  Pass:    Admin2026$")
-    print("  Master:  Frutas$Master2006")
-    print("  Reset:   http://localhost:5000/reset-frutas-2024")
-    print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)), debug=False)
-
-
 # ═══════════════════════════════════════════════════════
 # MARCAR PAGADO
 # ═══════════════════════════════════════════════════════
@@ -1822,7 +1793,6 @@ def admin_compras():
     total_gastos = sum(c2["costo"] for c2 in compras)
     ganancia     = ventas - total_gastos
 
-    # Build rows
     filas = ""
     for c2 in compras:
         filas += """<tr>
@@ -1843,7 +1813,6 @@ def admin_compras():
 
     gan_color = "#22c55e" if ganancia >= 0 else "#ef4444"
     gan_ico   = "📈" if ganancia >= 0 else "📉"
-
     alerta_html = '<div class="alerta alerta-ok">%s</div>' % msg if msg else ""
 
     return nav("admin_panel", c) + """
@@ -1853,7 +1822,6 @@ def admin_compras():
     <a href="/admin" class="btn btn-ro">← Volver al Admin</a>
   </div>
   %s
-  <!-- RESUMEN -->
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
     <div class="stat">
       <div class="stat-n">%s</div>
@@ -1868,7 +1836,6 @@ def admin_compras():
       <div class="stat-l">%s Ganancia Neta</div>
     </div>
   </div>
-  <!-- AGREGAR COMPRA -->
   <div class="panel" style="max-width:600px;margin-bottom:20px">
     <h2>➕ Registrar Compra</h2>
     <form method="POST">
@@ -1886,7 +1853,6 @@ def admin_compras():
       <button type="submit" class="btn btn-mo btn-full" style="margin-top:6px">💾 Guardar Compra</button>
     </form>
   </div>
-  <!-- HISTORIAL -->
   <div class="panel">
     <h2>📋 Historial de Compras (%d)</h2>
     <div class="tabla-wrap">
@@ -1904,3 +1870,19 @@ def admin_compras():
        gan_color, gan_color, gan_ico, fmt(abs(ganancia)),
        gan_ico,
        len(compras), filas or '<tr><td colspan="6" style="text-align:center;padding:18px;color:#c8a415">Sin compras registradas.</td></tr>') + PIE + JS_CARRITO + "</body></html>"
+
+
+# ═══════════════════════════════════════════════════════
+# INICIO
+# ═══════════════════════════════════════════════════════
+if __name__ == "__main__":
+    print("\n" + "="*50)
+    print("  🍊  Mercado Frutas Frescas")
+    print("="*50)
+    print("  Tienda:  http://localhost:5000")
+    print("  Admin:   http://localhost:5000/admin")
+    print("  Pass:    Admin2026$")
+    print("  Master:  Frutas$Master2006")
+    print("  Reset:   http://localhost:5000/reset-frutas-2024")
+    print("="*50 + "\n")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)), debug=False)
