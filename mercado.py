@@ -659,7 +659,7 @@ def tienda():
     cards_html = ""
     modales_det = ""
     for p in prods:
-        raw_img  = p["imagen"] or ""
+        raw_img = p["imagen"] or ""
         if raw_img:
             if ";" in raw_img:
                 mime_part, b64_part = raw_img.split(";", 1)
@@ -1229,7 +1229,6 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
     <button class="btn btn-mo btn-full" style="margin-top:12px" onclick="imprimirTicket('%s')">🖨️ Imprimir</button>
   </div>
 </div>""" % (mid_enc, mid_enc, p["id"], p["nombre_cliente"], p["celular"], it_enc, tk_enc, mid_enc)
-
         if p["estado"] == "Aprobado":
             est_badge = '<span class="bdg bdg-c">✅ Aprobado</span>'
             btns_enc  = ("<a href='/admin/marcar-pagado/%d' class='btn btn-ve' style='font-size:.8rem;padding:5px 12px'>💵 Pagado</a>"
@@ -1237,21 +1236,15 @@ def render_admin(peds, prods, grafica=None, msg="", tipo="ok"):
         else:
             est_badge = '<span class="bdg bdg-c">💵 Pagado</span>'
             btns_enc  = ""
-
-        filas_enc += ("<tr>"
-            "<td><strong>#%d</strong></td>"
-            "<td><span class='ped-ficha'>%s</span></td>"
+        filas_enc += ("<tr><td><strong>#%d</strong></td><td><span class='ped-ficha'>%s</span></td>"
             "<td><strong>%s</strong><br><span style='font-size:.73rem;color:#888'>📱 %s</span></td>"
-            "<td style='color:var(--mo);font-weight:900'>%s</td>"
-            "<td>%s</td>"
+            "<td style='color:var(--mo);font-weight:900'>%s</td><td>%s</td>"
             "<td style='color:#c8a415;font-size:.8rem'>%s</td>"
             "<td style='display:flex;gap:5px;flex-wrap:wrap'>"
             "<button class='btn btn-az' style='font-size:.76rem;padding:4px 9px' onclick=\"abrirModal('%s')\">📋</button>%s"
             "</td></tr>") % (p["id"], p["ficha"] or "—", p["nombre_cliente"], p["celular"],
                              fmt(p["total"]), est_badge, p["fecha"], mid_enc, btns_enc)
-
-    html += ("<div id='tab_encargos' style='display:none'>"
-             "<div class='panel'><h2>📦 Encargos (%d)</h2>"
+    html += ("<div id='tab_encargos' style='display:none'><div class='panel'><h2>📦 Encargos (%d)</h2>"
              "<div class='tabla-wrap'><table><thead><tr>"
              "<th>#</th><th>Ficha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th>"
              "</tr></thead><tbody>%s</tbody></table></div></div></div>") % (
@@ -1354,8 +1347,7 @@ def admin_add_prod():
             raw = fi.read()
             mime = fi.mimetype or "image/jpeg"
             if not mime.startswith("image/"): mime = "image/jpeg"
-            if len(raw) < 2_000_000:
-                img = mime + ";" + base64.b64encode(raw).decode()
+            if len(raw) < 2_000_000: img = mime + ";" + base64.b64encode(raw).decode()
     db = get_db()
     db.execute("INSERT INTO productos(nombre,precio,descripcion,unidad,categoria,imagen) VALUES(?,?,?,?,?,?)",
                (f["nombre"].strip(), float(f["precio"]),
@@ -1376,15 +1368,6 @@ def admin_edit_prod():
                 f.get("descripcion","").strip(),
                 f.get("unidad","unidad").strip(),
                 f.get("categoria","Frutas"), f["pid"]))
-    if "imagen" in request.files:
-        fi = request.files["imagen"]
-        if fi and fi.filename:
-            raw = fi.read()
-            mime = fi.mimetype or "image/jpeg"
-            if not mime.startswith("image/"): mime = "image/jpeg"
-            if len(raw) < 2_000_000:
-                img = mime + ";" + base64.b64encode(raw).decode()
-                db.execute("UPDATE productos SET imagen=? WHERE id=?", (img, f["pid"]))
     db.commit(); db.close()
     return redirect(url_for("admin_panel", msg="✅ Producto actualizado.", tipo="ok"))
 
@@ -1410,7 +1393,7 @@ def admin_upd_pedido():
     db.commit(); db.close()
     if est == "Aprobado": msg = "✅ Pedido #%s aprobado." % pid
     elif est == "Negado":  msg = "❌ Pedido #%s negado." % pid
-    else:                  msg = "⏳ Pedido #%s en pendiente." % pid
+    else:                  msg = "⏳ Pedido #%s pendiente." % pid
     return redirect(url_for("admin_panel", msg=msg, tipo="ok"))
 
 
