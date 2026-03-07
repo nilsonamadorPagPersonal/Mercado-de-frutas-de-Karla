@@ -693,13 +693,13 @@ def tienda():
       <input type="number" class="qty-num" id="qd%d" value="0" min="0">
       <button class="qty-btn" onclick="cambiarQty('md%d',1)">+</button>
     </div>
-    <button class="btn btn-mo btn-full" onclick="agregarDesdeDetalle(%d,'%s',%g,'%s','%s')">🛒 Agregar al pedido</button>
+    <button class="btn btn-mo btn-full" data-img="%s" onclick="agregarDesdeDetalle(%d,'%s',%g,this.dataset.img,'%s')">🛒 Agregar al pedido</button>
   </div>
 </div>""" % (mid, mid, img_modal, p["nombre"],
              desc, unid, p["categoria"],
              fmt(p["precio"]), unid,
              p["id"], p["id"], p["id"],
-             p["id"], esc(p["nombre"]), p["precio"], esc(img_src), esc(unid))
+             img_src, p["id"], esc(p["nombre"]), p["precio"], esc(unid))
 
         cards_html += """<div class="card" data-cat="%s" data-nombre="%s">
   <div class="card-img" onclick="abrirModal('%s')">
@@ -715,7 +715,7 @@ def tienda():
       <input type="number" class="qty-num" id="qty_%d" value="0" min="0">
       <button class="qty-btn" onclick="cambiarQty(%d,1)">+</button>
     </div>
-    <button class="btn-add" id="btn_%d" onclick="agregarProducto(%d,'%s',%g,'%s','%s')">🛒 Agregar</button>
+    <button class="btn-add" id="btn_%d" data-img="%s" onclick="agregarProducto(%d,'%s',%g,document.getElementById('btn_%d').dataset.img,'%s')">🛒 Agregar</button>
   </div>
 </div>""" % (esc(p["categoria"]), esc(p["nombre"]),
              mid, p["categoria"], img_card,
@@ -723,7 +723,7 @@ def tienda():
              ('<div class="card-desc">%s</div>' % desc[:55]+("..." if len(desc)>55 else "")) if desc else "",
              unid, fmt(p["precio"]),
              p["id"], p["id"], p["id"],
-             p["id"], p["id"], esc(p["nombre"]), p["precio"], esc(img_src), esc(unid))
+             p["id"], img_src, p["id"], esc(p["nombre"]), p["precio"], p["id"], esc(unid))
 
     grid = '<div class="grid" id="grilla">%s</div>' % cards_html if cards_html else '<div class="alerta alerta-in">No hay productos disponibles.</div>'
 
